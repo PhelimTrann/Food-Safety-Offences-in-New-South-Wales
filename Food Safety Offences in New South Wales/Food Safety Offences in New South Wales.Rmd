@@ -1,0 +1,347 @@
+---
+title: "Data Visualization and Analysis of Food Safety Offences in New South Wales"
+output:
+  pdf_document:
+    keep_tex: no
+    includes:
+date: "Friday September 29th, 2023"
+author: "Gia Bao Tran"
+---
+
+\section{Question 1}
+
+a) 
+
+
+```{r, echo=TRUE}
+#run needed packages
+library(tidyverse)
+library(dplyr)
+library(readr)
+library(ggplot2)
+#Read data from 'penalty_notice.csv' and calculate total offences by LGA
+penalty <- read_csv('penalty_notice.csv')
+offence_number <- penalty %>%
+  group_by(Offence_LGA) %>%
+  summarise(n.Offence=n())
+head(offence_number)
+```
+
+The order of data is on alphabeltical order of Offence_LGA column. Therefore, the insights about total number of offences by LGA can not be shown (max,min,columns comparison). The space is not enough to plot large number of variables. Data vary between large interval (from 1 to over 300) makes it difficult to spot the exact number due to small space.
+
+b) 
+
+```{r, echo=TRUE}
+# create new table to group by Offence_LGA then create new column to rank and choose top 1
+
+LGA_offence1 <- penalty %>%
+  group_by(Offence_LGA) %>%
+  summarise(n.Offences=n()) %>%
+  mutate(rank = min_rank(desc(n.Offences))) %>%
+  arrange(rank) %>%
+  filter(rank==1)
+
+LGA_offence1
+```
+
+Canterbury-Bankstown has the most offences
+
+c) 
+
+```{r, echo=TRUE}
+#Create new table to group by Offence_LGA then create new column to rank and arrange top 6
+Top_LGA_offence <- penalty %>%
+  group_by(Offence_LGA) %>%
+  summarise(n=n()) %>%
+  mutate(rank = min_rank(desc(n))) %>%
+  filter(rank <= 6) %>%
+  arrange(rank)
+
+#Create bar chart for top 7 and reorder to decending
+ggplot(Top_LGA_offence, aes(x=reorder(Offence_LGA,-n), y=n)) +
+  geom_bar(stat='identity', fill="#56B4E9")+
+  ggtitle("Popular LGAs Offences")+ theme_light()+ 
+  theme(plot.title = element_text(hjust = 0.5)) + xlab("Location")+ylab("Count")
+```
+
+Top 6 LGAs has the most offences are Canterbury-Bankstown, Burwood, Blacktown, Cumberland, Liverpool, City of Canada Bay and Willoughby (both top 6)
+
+\section{Question 2}
+
+a) 
+
+```{r, echo=TRUE}
+library('zoo')
+#Group data by year and month to another table
+Offence_Time <- penalty %>%
+  group_by(Year, Month) %>%
+  summarise(n=n())
+#Set new column as composite of Month and Year
+Offence_Time$time <- as.yearmon(paste(Offence_Time$Year, Offence_Time$Month), "%Y %m")
+# Create Bar chart to count number of offences by time with n and time column
+ggplot(Offence_Time, aes(x=time,y=n)) + geom_bar(stat='identity', fill="#56B4E9") + 
+  xlab("Time") + ylab("Count") + ggtitle("Number of Offences by Time") + 
+  theme_light() + theme(plot.title = element_text(hjust = 0.5))
+```
+
+
+b) Are there any trends, patterns or seasonality in the number of events over time?
+
+The data has no trend since the offences fluctuate over time. However, the recorded number of offences significantly lower in the beginning and end of the survey. Other patterns can be seen is the number of offences significantly drop every 5 months starting from Feb 2022.
+c) 
+
+```{r, echo=TRUE}
+#Create new table with year, month and n as mean of amount payable
+Av_payable <- penalty %>%
+  group_by(Year, Month) %>%
+  summarise(n=mean(Amount_Payable))
+# #Set new column (time) as composite of Month and Year
+Av_payable$time <- as.yearmon(paste(Av_payable$Year, Av_payable$Month), "%Y %m")
+# Create line graph with variables are average amount payable and time
+ggplot(Av_payable, aes(x=time,y=n)) + geom_line(stat='identity', color="#56B4E9")+ 
+  geom_point(colour="#FF5733") +
+xlab("Time") + ylab("Average Payable") + ggtitle("Amount Payable by Time") + 
+theme_light() + theme(plot.title = element_text(hjust = 0.5))
+```
+
+d) Are there any trends, patterns or seasonality in average amounts payable over time?
+ The amount payable had the tendency to increase considerably overtime from late 2021 to March 2022. This might because of recovery from Covid-19 (more restaurant operated, more customers and more inspects) and the act of bumping money from the government lead to inflation. However, after March 2022, when the economy found its equilibrium again, the columns stay leveled over time with above 750 thousand. 
+\section{Question 3}
+
+a) 
+
+```{r, echo=TRUE}
+#Create new table and add new columns by filter NSW food authority and Councils
+differences <- penalty %>%
+  mutate(Authority_name=ifelse(penalty$Issuing_Authority=="NSW Food Authority","Authority","Councils"))
+#Create violin plots with Amount Payable and Authority name variables, add point to indicate data density
+ggplot(differences, aes(x = Authority_name, y = Amount_Payable, fill=Authority_name)) +
+geom_violin() + xlab("Authority Name") + ylab("Amount Payable") + 
+ggtitle("Penalty from Authority vs Council") + theme_light()+ 
+theme(plot.title = element_text(hjust = 0.5)) + 
+  geom_point(position = position_jitter(seed = 1, width = 0.1))
+
+```
+
+b) Is there a difference in the amounts payable issued by the NSW Food Authority compared to Councils?
+
+Apart from the similarity in most occurred demand of penalty number of Authority and Councils (above 800), the penalties with value from 800 to 1200 from councils are less fluctuate than that of the NSW Food Authority. The penalty from Councils can be blow the minimum of Authority (below 400). The minimum amount payable (at around 400) at Councils are also occurred more frequent. On the other hand, high-amount-penalties are more likely to be issued by the Authority but not significant.
+\section{Question 4}
+
+a) 
+```{r, echo=TRUE}
+#Load data and packages
+library(tidyverse)
+library(sf)
+abs_lga <- st_read("LGA_2021_AUST_GDA2020_SHP/LGA_2021_AUST_GDA2020.shp")
+nsw_lga <- abs_lga %>% filter(STE_NAME21=='New South Wales')
+# Create table to show number of offences by place, then rename to match with second table
+penalty2 <- penalty %>%
+rename(LGA_NAME21 = Offence_LGA) %>%
+group_by(LGA_NAME21) %>%
+  summarise(n=n())
+
+# Create second table (which contain geometry) to remove unexpected symbol from LGA_NAME21
+nsw_lga2 <- nsw_lga %>%
+mutate(LGA_NAME21 = str_remove(LGA_NAME21, " \\(.+\\)"))
+
+# Merge 2 tables using LGA_NAME21 column
+mapping <- merge(nsw_lga2, penalty2, by = "LGA_NAME21", sort = FALSE)
+
+# assign dot for data frame  
+dots <- select(as.data.frame(mapping), n) # each dot represents 1 offence
+
+library(lwgeom)
+# Random the dots on map
+random_dots <- map(names(dots),
+~st_sample(mapping,
+size = as.integer(dots[,.]),
+type = "random"))
+
+# Extract geometry of dots
+coords <- map(random_dots, ~as.data.frame(do.call(rbind, st_geometry(.))) %>% select(x = V1, y = V2))
+
+coords<-as.data.frame(coords)
+
+# Plot the map 
+ggplot() +
+geom_sf(data = nsw_lga2, colour = "#d3d3d3", fill = "white", size = 0.3) + 
+  geom_point(data = coords, aes(x,y), size = 0.3, alpha = 0.5, color = "purple4") + 
+  coord_sf(xlim = c(140,155), ylim = c(-38,-28)) + ggtitle("NSW Offences map")
+```
+
+b)
+```{r, echo=TRUE}
+#Zoom the map with Sydney coordinate
+ggplot() +
+geom_sf(data = nsw_lga2, colour = "#d3d3d3", fill = "white", size = 0.3) + 
+  geom_point(data = coords, aes(x,y), size = 0.3, alpha = 0.5, color = "purple4") + 
+  coord_sf(xlim = c(150.5,151.5), ylim = c(-34.2,-33.5)) + ggtitle("Sydney Offences map")
+
+#Rename table column LGA_NAME21 to NAME
+nsw_lga2 <- nsw_lga2 %>%
+rename(NAME = LGA_NAME21)
+
+# Assign name into the map
+library(ggrepel)
+lga.centre<-st_centroid(nsw_lga2) 
+lga.centre<-as.data.frame(st_coordinates(lga.centre)) 
+lga.centre$NAME<-nsw_lga2$NAME
+lga.centre<- filter(lga.centre, X>150.5 & X<151.5 & Y > -34.2 & Y < -33.5) 
+sp1<-ggplot() +
+geom_sf(data = abs_lga, colour = "grey", fill = "white", size = 0.3) + 
+  geom_point(data = coords, aes(x, y), size = 0.3, alpha = 0.5, color = "purple4") + 
+  coord_sf(xlim = c(150.5,151.5), ylim = c(-34.2,-33.5))+
+geom_text_repel(data = lga.centre, aes(label = NAME, x=X, y=Y)) + ggtitle("Sydney Offences map")
+
+sp1
+```
+
+c) In one sentence, explain why we may want to focus on the Sydney region.
+
+The majority of data are occurred in Sydney, which is the most populated region.
+
+d) In about 3 sentences, summarise the main results of the plot presented in part (c).
+
+The number of offences are correlated with the population of every region, which also means the number of food businesses. Majority of offences occurred at Sydney CBD (Burwood, Strathfield), which is also most populous and has the highest amount of food businesses density. The second most occurred offences are the coasts near centre with Waverly and Moseman. Third regions are Parramatta, Liverpool, Blacktown with medium population and restaurant density. Other regions are insignificant with less population.
+\section{Question 5}
+
+a) 
+
+- point 1: group number of similar data to know how many specific type of nature_of_offence.
+- point 2: group by key words of offences 
+- point 3: Then assign them into broader categories of offences
+
+
+b)  add code chunks and descriptions below
+
+```{r, echo=TRUE}
+
+#Create new table to group to see how many types of offences
+penalty5 <- penalty %>%
+  group_by(Nature_of_Offence_Full) %>%
+  summarise(n.Descp=n())  
+
+# Set Nature_of_Offence_Ful as character
+penalty5$Nature_of_Offence_Full <- as.character(penalty5$Nature_of_Offence_Full)
+
+# Group Nature of Offence into broader categories by picking key words
+penalty5 <- penalty5 %>%
+  mutate(Abr = case_when(
+    grepl('food safety scheme|prohibition order|licence',Nature_of_Offence_Full) ~ 
+      'order compliance',
+    grepl('supervis|advisory',Nature_of_Offence_Full) ~ 'Food supervising & supervisor',
+    grepl('hazardous food',Nature_of_Offence_Full) ~ 'hazardous food management',
+    grepl('frozen',Nature_of_Offence_Full) ~ 'frozen food management',
+    grepl('sanitary',Nature_of_Offence_Full) ~ 'food surface and utensils sanitary',
+    grepl('hand washing facilities|hand washing facility',Nature_of_Offence_Full) ~ 
+      'hand washing facilities and supply',
+    grepl('Sale of food|ntended for sale|ive animals',Nature_of_Offence_Full) ~ 
+      'Food sale safety and hygiene',
+    grepl('food premises',Nature_of_Offence_Full) ~ 'food premises safety and hygiene',
+    grepl('fixtures',Nature_of_Offence_Full) ~ 'fixtures safety and hygiene',
+    grepl('processing food|displaying|only safe and suitable food',
+          Nature_of_Offence_Full) ~ 'food processing and display protection',
+    grepl('enforcement',Nature_of_Offence_Full) ~ 'enforcement agency notification',
+    grepl('store|protected|contamination',Nature_of_Offence_Full) ~ 
+      'contamination protection storage',
+    grepl('practicable measures to eradicate',Nature_of_Offence_Full) ~ 
+      'pests harbourage prevention',
+    grepl('floors|wall',Nature_of_Offence_Full) ~ 'interior management',
+    grepl('disposal|garbage|grabage',Nature_of_Offence_Full) ~ 'disposal management'
+    ))
+
+# MAKE 3 STATISTICAL GRAPHS
+
+# create new table for 3 plot
+penalty6 <- penalty
+penalty6$Nature_of_Offence_Full <- as.character(penalty6$Nature_of_Offence_Full)
+penalty6 <- penalty6 %>%
+  mutate(Abr = case_when(
+    grepl('food safety scheme|prohibition order|licence',Nature_of_Offence_Full) ~ 
+      'order compliance',
+    grepl('supervis|advisory',Nature_of_Offence_Full) ~ 'Food supervising & supervisor',
+    grepl('hazardous food',Nature_of_Offence_Full) ~ 'hazardous food management',
+    grepl('frozen',Nature_of_Offence_Full) ~ 'frozen food management',
+    grepl('sanitary',Nature_of_Offence_Full) ~ 'food surface and utensils sanitary',
+    grepl('hand washing facilities|hand washing facility',Nature_of_Offence_Full) ~ 
+      'hand washing facilities and supply',
+    grepl('Sale of food|ntended for sale|ive animals',Nature_of_Offence_Full) ~ 
+      'Food sale safety and hygiene',
+    grepl('food premises',Nature_of_Offence_Full) ~ 'food premises safety and hygiene',
+    grepl('fixtures',Nature_of_Offence_Full) ~ 'fixtures safety and hygiene',
+    grepl('processing food|displaying|only safe and suitable food',
+          Nature_of_Offence_Full) ~ 'food processing and display protection',
+    grepl('enforcement',Nature_of_Offence_Full) ~ 'enforcement agency notification',
+    grepl('store|protected|contamination',Nature_of_Offence_Full) ~ 
+      'contamination protection storage',
+    grepl('practicable measures to eradicate',Nature_of_Offence_Full) ~ 
+      'pests harbourage prevention',
+    grepl('floors|wall',Nature_of_Offence_Full) ~ 'interior management',
+    grepl('disposal|garbage|grabage',Nature_of_Offence_Full) ~ 'disposal management'
+    ))%>%
+  mutate(Authority_name=ifelse(penalty$Issuing_Authority=="NSW Food Authority",
+                               "Authority","Councils"))
+
+# GRAPH 1: facet wrap of scatter plot for types of offences by years and months 
+  #Create new table and group needed columns
+library(ggplot2)
+graph1 <- penalty6 %>%
+  group_by(Abr,Year,Month) %>%
+  summarise(n=n()) 
+  #Plot the graph
+ggplot(graph1, aes(x = n, y = Month, colour=Year)) + geom_point() + labs(x=NULL)+ 
+  theme(text=element_text(size=8)) + facet_wrap(~Abr, drop=TRUE) + coord_flip() + 
+  scale_y_continuous(breaks = 1:12) + xlab('Number of Offences') +
+  ggtitle("Number of offences by years and months")
+
+# GRAPH 2: scatter plot of offences by penalty issuers and years
+  #Create new table and group needed columns
+library(ggplot2)
+graph2 <- penalty6 %>%
+  group_by(Abr,Authority_name,Year) %>%
+  summarise(n=n())
+  #Plot the graph
+ggplot(data = graph2, aes(x=Authority_name, y=Abr, color=as.factor(Year))) + 
+  geom_point(size=2, alpha=0.5) +
+  geom_jitter(width=0.1) + theme(text=element_text(size=10)) + 
+  ggtitle("Penalties issued by departments through years") + 
+  scale_colour_brewer(palette="Set1") + xlab('Authority name') + 
+  ylab('Offences') + labs(color='Year') + theme(plot.title = element_text(hjust = 0))
+
+# GRAPH 3: Stack bar chart of average amount payable through months by top 5 most                               occured offenses.
+
+  #Create new table, which only get top 5 amount of offences
+top5 <- penalty6 %>%
+  group_by(Abr) %>%
+  summarise(n=n()) %>%
+  mutate(rank = min_rank(desc(n))) %>%
+  arrange(rank) %>%
+  filter(rank<6)
+
+
+  #Get the name from top5 table to filter top5 offences and group them by month                                   and average amount payable
+graph3 <- penalty6 %>%
+  filter(Abr == "food premises safety and hygiene"|Abr== 'hand washing facilities and supply'
+         |Abr== "fixtures safety and hygiene"| Abr== "contamination protection storage"
+         | Abr== "hazardous food management" ) %>%
+  group_by(Abr,Month) %>%
+  summarise(n=mean(Amount_Payable)) 
+
+  #Plot the tack bar chart 
+ggplot(graph3, aes(fill=Abr, x=Month, y=n)) + geom_bar(stat="identity") + 
+  scale_fill_brewer(palette = "Pastel1") + theme(text=element_text(size=10)) + 
+  scale_x_continuous(breaks = 1:12) + ggtitle("Top 5 Offenses average Amount Payable by Month.") + 
+  xlab('Month') + ylab('Average Amount Payable') + labs(fill='Offense names') + theme(plot.title = element_text(hjust = 1))
+```
+ 
+ Graph 1 comments: it can be seen that the "disposal management" "enforcement agency notification", "frozen food management" and "interior management" are the least occurred offences compared to others. Majority of the violations are directly related to food (include "food" in the abbreviation). Majority of offences occurred less than 10 times with only "food premises hygiene" and "contamination protection storage" occurring around nearly 30 times (maximum number). The violations scattered throughout the months. However, it had the tendency to condense in the first half of the year from February to June.
+ 
+ 
+ Graph 2 comments: first of all, the penalties issued by the Councils are shown to be significantly higher than that of the NSW Food Authority. The Authority did not proceed with any penalty fines on "disposal management", "enforcement agency notification", "frozen food management" and "hazardous food management". On the other hand, categories of investigation from Councils are equally diversified. While the number of offences committed between 2022 and 2023 are fairly equal, the Authority is less active in 2023 with only 3 categories involved. The Councils seem to be even more active in 2023 than 2022, which comprise the majority of 2023 penalties publication.
+
+ 
+ Graph 3 comments: Among top 5 most occurred offences there are 3 directly related to food ("hazardous food management", "food premises safety and hygiene", and "contamination protection storage"). Others are fixtures and facilities hygiene. The average amount payable varies between 700.000 to 900.000 AUD for all violations. This can be inferred that they are in the same broad category with minimal differences in rating methodology. The total amount of penalties seem to increase very mid and end of year. However the seasonality is inconsiderable and the trend is level with the total average of top 5 vary around 4.000.000 AUD. 
+
+ 
+ 
